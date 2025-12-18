@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="bn" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diganta - ই-বুক স্টোর</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    body {
+      box-sizing: border-box;
+      font-family: 'Hind Siliguri', sans-serif;
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="h-full w-full">
+  <div id="app" class="h-full w-full overflow-auto"></div>
+  <script>
+    const defaultConfig = {
+      store_name: "Diganta",
+      store_phone: "01715247588",
+      store_email: "eco452@gmail.com",
+      banner_title: "জ্ঞানের ভান্ডার আপনার হাতের মুঠোয়",
+      banner_subtitle: "সেরা বাংলা ই-বুক কালেকশন",
+      primary_color: "#10b981",
+      secondary_color: "#ffffff",
+      accent_color: "#3b82f6",
+      text_color: "#1f2937",
+      card_color: "#f8fafc"
+    };
+    
+    let allData = [];
+    
+    function renderApp() {
+      const config = window.elementSdk?.config || defaultConfig;
+      const app = document.getElementById('app');
+      
+      app.innerHTML = `
+        <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dbeafe 100%); min-height: 100%;">
+          <header style="background-color: ${config.secondary_color || '#ffffff'}; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;">
+              <h1 style="font-size: 36px; font-weight: bold; color: ${config.primary_color || '#10b981'};">
+                📚 ${config.store_name || 'Diganta'}
+              </h1>
+              <div style="display: flex; gap: 20px; align-items: center;">
+                <a href="tel:${config.store_phone || '01715247588'}" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: ${config.text_color || '#1f2937'}; font-weight: 600; font-size: 18px;">
+                  <span style="font-size: 24px;">📞</span>
+                  <span>${config.store_phone || '01715247588'}</span>
+                </a>
+                <button onclick="alert('Admin Panel: পাসওয়ার্ড admin123')" style="background-color: ${config.accent_color || '#3b82f6'}; color: white; padding: 12px 24px; border-radius: 8px; border: none; font-weight: 600; font-size: 16px; cursor: pointer;">
+                  Admin
+                </button>
+              </div>
+            </div>
+          </header>
+          
+          <section style="background: linear-gradient(135deg, ${config.primary_color || '#10b981'} 0%, ${config.accent_color || '#3b82f6'} 100%); padding: 80px 20px; text-align: center; color: white;">
+            <div style="max-width: 900px; margin: 0 auto;">
+              <h2 style="font-size: 56px; font-weight: bold; margin-bottom: 20px;">
+                ${config.banner_title || 'জ্ঞানের ভান্ডার আপনার হাতের মুঠোয়'}
+              </h2>
+              <p style="font-size: 28px; opacity: 0.95;">
+                ${config.banner_subtitle || 'সেরা বাংলা ই-বুক কালেকশন'}
+              </p>
+            </div>
+          </section>
+          
+          <main style="max-width: 1200px; margin: 0 auto; padding: 60px 20px;">
+            <h3 style="font-size: 40px; font-weight: bold; margin-bottom: 40px; text-align: center; color: ${config.text_color || '#1f2937'};">
+              আমাদের বই সংগ্রহ
+            </h3>
+            
+            <div style="background-color: ${config.card_color || '#f8fafc'}; border-radius: 20px; padding: 60px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
+              <p style="font-size: 32px; color: #9ca3af; margin-bottom: 30px;">
+                এখনো কোনো বই যুক্ত করা হয়নি
+              </p>
+              <button onclick="alert('Admin Panel এ যান → Login করুন (পাসওয়ার্ড: admin123) → + নতুন বই যুক্ত করুন')" style="background-color: ${config.primary_color || '#10b981'}; color: white; padding: 16px 32px; border-radius: 12px; border: none; font-weight: 600; font-size: 20px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                প্রথম বই যুক্ত করুন
+              </button>
+            </div>
+          </main>
+          
+          <footer style="background-color: ${config.text_color || '#1f2937'}; color: white; padding: 40px 20px; margin-top: 60px;">
+            <div style="max-width: 1200px; margin: 0 auto; text-align: center;">
+              <p style="font-size: 24px; font-weight: 600; margin-bottom: 10px;">
+                ${config.store_name || 'Diganta'}
+              </p>
+              <p style="font-size: 18px;">
+                📞 ${config.store_phone || '01715247588'} | 📧 ${config.store_email || 'eco452@gmail.com'}
+              </p>
+              <p style="margin-top: 20px; font-size: 14px; opacity: 0.75;">
+                © 2024 ${config.store_name || 'Diganta'}. সর্বস্বত্ব সংরক্ষিত।
+              </p>
+            </div>
+          </footer>
+        </div>
+      `;
+    }
+    
+    async function initApp() {
+      const dataHandler = {
+        onDataChanged(data) {
+          allData = data;
+          renderApp();
+        }
+      };
+      
+      await window.dataSdk.init(dataHandler);
+      
+      if (window.elementSdk) {
+        await window.elementSdk.init({
+          defaultConfig,
+          onConfigChange: async (config) => {
+            renderApp();
+          },
+          mapToCapabilities: (config) => ({
+            recolorables: [
+              {
+                get: () => config.primary_color || defaultConfig.primary_color,
+                set: (value) => {
+                  config.primary_color = value;
+                  window.elementSdk.setConfig({ primary_color: value });
+                }
+              },
+              {
+                get: () => config.secondary_color || defaultConfig.secondary_color,
+                set: (value) => {
+                  config.secondary_color = value;
+                  window.elementSdk.setConfig({ secondary_color: value });
+                }
+              },
+              {
+                get: () => config.accent_color || defaultConfig.accent_color,
+                set: (value) => {
+                  config.accent_color = value;
+                  window.elementSdk.setConfig({ accent_color: value });
+                }
+              },
+              {
+                get: () => config.text_color || defaultConfig.text_color,
+                set: (value) => {
+                  config.text_color = value;
+                  window.elementSdk.setConfig({ text_color: value });
+                }
+              },
+              {
+                get: () => config.card_color || defaultConfig.card_color,
+                set: (value) => {
+                  config.card_color = value;
+                  window.elementSdk.setConfig({ card_color: value });
+                }
+              }
+            ],
+            borderables: [],
+            fontEditable: undefined,
+            fontSizeable: undefined
+          }),
+          mapToEditPanelValues: (config) => new Map([
+            ["store_name", config.store_name || defaultConfig.store_name],
+            ["store_phone", config.store_phone || defaultConfig.store_phone],
+            ["store_email", config.store_email || defaultConfig.store_email],
+            ["banner_title", config.banner_title || defaultConfig.banner_title],
+            ["banner_subtitle", config.banner_subtitle || defaultConfig.banner_subtitle]
+          ])
+        });
+      }
+      
+      renderApp();
+    }
+    
+    initApp();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9afc6d5080b34ea6',t:'MTc2NjAzNzQ5MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
