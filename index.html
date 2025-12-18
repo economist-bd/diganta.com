@@ -110,7 +110,6 @@
         import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // manual config based on your previous input
         const manualFirebaseConfig = {
             apiKey: "AIzaSyBHFsTRQT1eopfz8NG5ux__0QKgKCnoXOE",
             authDomain: "support-94add.firebaseapp.com",
@@ -127,7 +126,6 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // state attached to window for global access
         window.state = {
             user: null,
             books: [],
@@ -148,66 +146,55 @@
 
         const init = async () => {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                
-                onAuthStateChanged(auth, user => { 
-                    if(user) { 
-                        window.state.user = user; 
-                        console.log("Authenticated as:", user.uid);
-                        setupListeners(); 
-                    } 
-                });
-            } catch (err) {
-                console.error("Firebase Auth Error:", err);
-                const loader = document.getElementById('global-loader');
-                if(loader) {
-                    loader.innerHTML = `<div class="p-8 bg-white rounded-3xl text-center shadow-xl border border-red-100">
-                        <p class="text-red-500 font-bold">ফায়ারবেস কানেক্ট হতে পারছে না!</p>
-                        <p class="text-xs text-slate-400 mt-2">${err.message}</p>
-                        <button onclick="location.reload()" class="mt-4 bg-slate-100 px-4 py-2 rounded-lg">আবার চেষ্টা করুন</button>
-                    </div>`;
-                }
-            }
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+                else await signInAnonymously(auth);
+                onAuthStateChanged(auth, user => { if(user) { window.state.user = user; setupListeners(); } });
+            } catch (err) { console.error("Auth Error", err); }
         };
 
         const setupListeners = () => {
-            // Updated Path: artifacts/{appId}/public/data/settings/siteConfig
             const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'siteConfig');
-            onSnapshot(configRef, d => { 
-                if(d.exists()) { 
-                    window.state.config = {...window.state.config, ...d.data()}; 
-                    document.documentElement.style.setProperty('--primary-color', window.state.config.primaryColor); 
-                } 
-                render(); 
-            }, (err) => console.error("Config Listener Error:", err));
-
-            // Books Listener
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'books'), s => { 
-                window.state.books = s.docs.map(d => ({id: d.id, ...d.data()})); 
-                console.log("Books Loaded:", window.state.books.length);
-                render(); 
-            }, (err) => {
-                console.error("Books Listener Error:", err);
-                alert("বই লোড করতে সমস্যা হচ্ছে। ফায়ারবেস রুলস চেক করুন।");
-            });
-
-            // Orders Listener
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => { 
-                window.state.orders = s.docs.map(d => ({id: d.id, ...d.data()})); 
-                if(window.state.isAdmin) render(); 
-            }, (err) => console.error("Orders Listener Error:", err));
-            
-            setTimeout(() => {
-                const loader = document.getElementById('global-loader');
-                if (loader) loader.style.display = 'none';
-            }, 1000);
+            onSnapshot(configRef, d => { if(d.exists()) { window.state.config = {...window.state.config, ...d.data()}; document.documentElement.style.setProperty('--primary-color', window.state.config.primaryColor); } render(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'books'), s => { window.state.books = s.docs.map(d => ({id: d.id, ...d.data()})); render(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => { window.state.orders = s.docs.map(d => ({id: d.id, ...d.data()})); if(window.state.isAdmin) render(); });
+            setTimeout(() => { const loader = document.getElementById('global-loader'); if(loader) loader.style.display = 'none'; }, 800);
         };
 
-        // file to base64
+        // Image Compression Utility
+        const compressImage = (file) => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    // Max resolution 800px
+                    const max_size = 800;
+                    if (width > height) {
+                        if (width > max_size) {
+                            height *= max_size / width;
+                            width = max_size;
+                        }
+                    } else {
+                        if (height > max_size) {
+                            width *= max_size / height;
+                            height = max_size;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    // Output quality 0.6 to keep size small
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
+                };
+            };
+        });
+
         const toBase64 = file => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
@@ -215,28 +202,37 @@
             reader.onerror = error => reject(error);
         });
 
-        window.handleFileSelect = async (e, type, index = -1) => {
+        window.handleFileSelect = async (e, type) => {
             const files = e.target.files;
             if(!files.length) return;
             const status = e.target.parentElement.querySelector('.file-status');
-            if(status) status.innerText = "প্রসেসিং...";
+            if(status) { status.innerText = "কম্প্রেস হচ্ছে..."; status.classList.remove('text-emerald-600'); }
 
             try {
-                if(type === 'main') window.state.tempFiles.main = await toBase64(files[0]);
+                if(type === 'main') window.state.tempFiles.main = await compressImage(files[0]);
                 else if(type === 'gallery') {
-                    for(let f of files) window.state.tempFiles.gallery.push(await toBase64(f));
+                    for(let f of files) window.state.tempFiles.gallery.push(await compressImage(f));
                 }
                 else if(type === 'preview') {
-                    for(let f of files) window.state.tempFiles.preview.push(await toBase64(f));
+                    for(let f of files) window.state.tempFiles.preview.push(await compressImage(f));
                 }
-                else if(type === 'pdf') window.state.tempFiles.pdf = await toBase64(files[0]);
+                else if(type === 'pdf') {
+                    // PDFs can't be compressed like images, check size limit (max 500KB for PDF in firestore)
+                    if(files[0].size > 500 * 1024) {
+                        alert("পিডিএফ ফাইলের সাইজ ৫০০ কেবি এর বেশি হতে পারবে না।");
+                        e.target.value = '';
+                        if(status) status.innerText = "❌ সাইজ বড়";
+                        return;
+                    }
+                    window.state.tempFiles.pdf = await toBase64(files[0]);
+                }
 
                 if(status) {
                     status.innerText = "✅ ফাইল রেডি";
                     status.classList.add('text-emerald-600');
                 }
             } catch(err) {
-                alert("ফাইল কনভার্ট করতে সমস্যা হয়েছে!");
+                console.error(err);
                 if(status) status.innerText = "❌ এরর";
             }
         };
@@ -261,48 +257,48 @@
                 <section class="relative bg-slate-900 h-[450px]">
                     <img src="${window.state.config.bannerImage}" class="w-full h-full object-cover opacity-40">
                     <div class="absolute inset-0 flex flex-col items-center justify-center text-center text-white px-4">
-                        <h2 class="text-4xl md:text-6xl font-black mb-4 leading-tight">${window.state.config.bannerTitle}</h2>
+                        <h2 class="text-4xl md:text-6xl font-black mb-4">${window.state.config.bannerTitle}</h2>
                         <p class="text-xl md:text-2xl opacity-90">${window.state.config.bannerSubtitle}</p>
                     </div>
                 </section>
                 <div class="max-w-7xl mx-auto px-4 -mt-20 relative z-10 pb-20">
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                         ${window.state.books.map(b => `
-                            <div onclick="navigateTo('detail', '${b.id}')" class="bg-white p-3 rounded-3xl shadow-lg hover:shadow-2xl transition cursor-pointer group border border-slate-50">
+                            <div onclick="navigateTo('detail', '${b.id}')" class="bg-white p-3 rounded-3xl shadow-lg hover:shadow-2xl transition cursor-pointer group">
                                 <div class="aspect-[3/4] rounded-2xl overflow-hidden bg-slate-100 mb-4">
-                                    <img src="${b.images?.[0] || 'https://via.placeholder.com/300x400?text=No+Image'}" class="w-full h-full object-cover group-hover:scale-110 transition duration-500" onerror="this.src='https://via.placeholder.com/300x400?text=Error'">
+                                    <img src="${b.images?.[0] || 'https://via.placeholder.com/300x400'}" class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
                                 </div>
-                                <h4 class="font-bold text-slate-800 truncate px-1">${b.title}</h4>
-                                <div class="flex justify-between items-center mt-2 px-1">
+                                <h4 class="font-bold text-slate-800 truncate">${b.title}</h4>
+                                <div class="flex justify-between items-center mt-2">
                                     <span class="text-emerald-600 font-black">৳${b.offerPrice}</span>
-                                    <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded">বিস্তারিত</span>
+                                    <span class="text-[10px] bg-slate-100 px-2 py-1 rounded">বিস্তারিত</span>
                                 </div>
                             </div>
                         `).join('')}
                     </div>
-                    ${window.state.books.length === 0 ? '<div class="text-center py-20 bg-white rounded-[2rem] text-slate-400 font-bold border-2 border-dashed border-slate-200">এখনো কোনো বই যুক্ত করা হয়নি। অ্যাডমিন প্যানেলে গিয়ে বই যোগ করুন।</div>' : ''}
+                    ${window.state.books.length === 0 ? '<div class="text-center py-20 bg-white rounded-3xl text-slate-300">কোনো বই যুক্ত নেই</div>' : ''}
                 </div>
             `;
         };
 
         const renderDetail = () => {
             const b = window.state.selectedBook;
-            if (!b) return '<div class="p-20 text-center font-bold">বই পাওয়া যায়নি!</div>';
+            if (!b) return '<div class="p-20 text-center">লোড হচ্ছে...</div>';
             return `
                 <div class="max-w-6xl mx-auto px-4 py-10">
                     <button onclick="navigateTo('home')" class="mb-8 font-bold text-slate-500 hover:text-emerald-600 flex items-center gap-2">⬅ ফিরে যান</button>
                     <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
                         <div class="lg:col-span-5 space-y-4">
-                            <div class="rounded-3xl overflow-hidden shadow-2xl aspect-[3/4] bg-slate-100 border">
-                                <img id="detail-main-img" src="${b.images?.[0] || 'https://via.placeholder.com/600x800'}" class="w-full h-full object-cover">
+                            <div class="rounded-3xl overflow-hidden shadow-2xl aspect-[3/4] bg-slate-100">
+                                <img id="detail-main-img" src="${b.images?.[0]}" class="w-full h-full object-cover">
                             </div>
                             <div class="flex gap-2 overflow-x-auto pb-2 custom-scroll">
-                                ${b.images?.map(img => `<img onclick="document.getElementById('detail-main-img').src='${img}'" src="${img}" class="w-16 h-20 object-cover rounded-xl cursor-pointer border-2 border-transparent hover:border-emerald-500 bg-white shadow-sm">`).join('')}
+                                ${b.images?.map(img => `<img onclick="document.getElementById('detail-main-img').src='${img}'" src="${img}" class="w-16 h-20 object-cover rounded-xl cursor-pointer border-2 border-transparent hover:border-emerald-500 bg-white">`).join('')}
                             </div>
                         </div>
                         <div class="lg:col-span-7">
-                            <h2 class="text-4xl font-black mb-2 text-slate-800">${b.title}</h2>
-                            <p class="text-slate-500 text-xl mb-6 font-medium">${b.author}</p>
+                            <h2 class="text-4xl font-black mb-2">${b.title}</h2>
+                            <p class="text-slate-500 text-xl mb-6">${b.author}</p>
                             <div class="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 flex items-center justify-between mb-8 shadow-sm">
                                 <div>
                                     <p class="text-slate-400 line-through text-sm">৳${b.price}</p>
@@ -317,7 +313,7 @@
                             <div id="tab-content" class="text-slate-600 leading-relaxed text-lg min-h-[150px] whitespace-pre-wrap">
                                 ${b.summary}
                             </div>
-                            <button onclick="openOrderModal('${b.id}')" class="mt-10 w-full bg-slate-900 text-white py-6 rounded-3xl font-black text-xl hover:bg-emerald-600 shadow-xl transition-all transform active:scale-95">🛒 এখনই অর্ডার করুন</button>
+                            <button onclick="openOrderModal('${b.id}')" class="mt-10 w-full bg-slate-900 text-white py-6 rounded-3xl font-black text-xl hover:bg-emerald-600 shadow-xl transition-all">🛒 এখনই অর্ডার করুন</button>
                         </div>
                     </div>
                 </div>
@@ -329,14 +325,14 @@
             return `
                 <div class="max-w-7xl mx-auto px-4 py-10">
                     <div class="flex justify-between items-center mb-10">
-                        <h2 class="text-3xl font-black">अ্যাডমিন প্যানেল</h2>
+                        <h2 class="text-3xl font-black">অ্যাডমিন প্যানেল</h2>
                         <button onclick="logoutAdmin()" class="text-red-500 font-bold underline px-4 py-2 hover:bg-red-50 rounded-xl transition">লগআউট</button>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div class="lg:col-span-3 flex lg:flex-col gap-2 overflow-x-auto pb-4 custom-scroll">
-                            <button onclick="toggleAdminTab('books')" class="whitespace-nowrap w-full text-left p-4 rounded-2xl border font-bold ${window.state.adminActiveTab==='books'?'bg-emerald-600 text-white border-emerald-600':'bg-white text-slate-600'} transition shadow-sm">📚 বইসমূহ</button>
-                            <button onclick="toggleAdminTab('orders')" class="whitespace-nowrap w-full text-left p-4 rounded-2xl border font-bold ${window.state.adminActiveTab==='orders'?'bg-emerald-600 text-white border-emerald-600':'bg-white text-slate-600'} transition shadow-sm">📦 অর্ডারসমূহ (${window.state.orders.length})</button>
-                            <button onclick="toggleAdminTab('settings')" class="whitespace-nowrap w-full text-left p-4 rounded-2xl border font-bold ${window.state.adminActiveTab==='settings'?'bg-emerald-600 text-white border-emerald-600':'bg-white text-slate-600'} transition shadow-sm">🎨 সেটিংস</button>
+                            <button onclick="toggleAdminTab('books')" class="whitespace-nowrap w-full text-left p-4 rounded-2xl border font-bold ${window.state.adminActiveTab==='books'?'bg-emerald-600 text-white border-emerald-600':'bg-white text-slate-600'} transition">📚 বইসমূহ</button>
+                            <button onclick="toggleAdminTab('orders')" class="whitespace-nowrap w-full text-left p-4 rounded-2xl border font-bold ${window.state.adminActiveTab==='orders'?'bg-emerald-600 text-white border-emerald-600':'bg-white text-slate-600'} transition">📦 অর্ডারসমূহ (${window.state.orders.length})</button>
+                            <button onclick="toggleAdminTab('settings')" class="whitespace-nowrap w-full text-left p-4 rounded-2xl border font-bold ${window.state.adminActiveTab==='settings'?'bg-emerald-600 text-white border-emerald-600':'bg-white text-slate-600'} transition">🎨 সেটিংস</button>
                         </div>
                         <div id="admin-view-container" class="lg:col-span-9 bg-white p-6 md:p-8 rounded-[2rem] border shadow-xl min-h-[500px]">
                             ${window.state.adminActiveTab==='books' ? renderAdminBooks() : window.state.adminActiveTab==='orders' ? renderAdminOrders(revenue) : window.state.adminActiveTab === 'settings' ? renderAdminSettings() : ''}
@@ -397,7 +393,7 @@
                                             <option value="cancelled" ${cur==='cancelled'?'selected':''}>বাতিল</option>
                                         </select>
                                     </td>
-                                    <td class="p-4"><button onclick="deleteOrder('${o.id}')" class="text-red-400 font-bold hover:underline">ডিলিট</button></td>
+                                    <td class="p-4 text-right"><button onclick="deleteOrder('${o.id}')" class="text-red-400 hover:text-red-600">ডিলিট</button></td>
                                 </tr>
                             `;
                         }).sort((a,b) => b.timestamp - a.timestamp).join('')}
@@ -428,10 +424,10 @@
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">প্রাইমারি কালার</label>
-                        <input type="color" id="s-color" value="${window.state.config.primaryColor}" class="w-full h-12 rounded-xl cursor-pointer border-none bg-transparent">
+                        <input type="color" id="s-color" value="${window.state.config.primaryColor}" class="w-full h-12 rounded-xl cursor-pointer">
                     </div>
                 </div>
-                <button onclick="saveSettings()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-emerald-600 shadow-xl transition-all">সেটিংস সেভ করুন</button>
+                <button onclick="saveSettings()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition">সেটিংস সেভ করুন</button>
             </div>
         `;
 
@@ -469,130 +465,63 @@
                         </div>
                         
                         <div class="space-y-4 md:col-span-2 border-t border-slate-100 pt-8">
-                            <h4 class="font-black text-slate-800 text-lg">মিডিয়া আপলোড</h4>
+                            <h4 class="font-black text-slate-800 text-lg">মিডিয়া আপলোড (সর্বোচ্চ ১টি ছবি ১০০০কেবি)</h4>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <label class="file-input-label">
-                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">বইয়ের কভার ফটো</span>
+                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">কভার ফটো (১টি)</span>
                                     <input type="file" accept="image/*" onchange="handleFileSelect(event, 'main')" class="hidden">
-                                    <div class="bg-white p-3 rounded-full shadow-inner mb-2">📁</div>
                                     <span class="file-status text-[10px] text-slate-400 font-bold uppercase">ফাইল সিলেক্ট করুন</span>
                                 </label>
                                 <label class="file-input-label">
-                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">গ্যালারি ফটো (ম্যাক্স ৫)</span>
+                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">গ্যালারি ফটো (ম্যাক্স ৩)</span>
                                     <input type="file" accept="image/*" multiple onchange="handleFileSelect(event, 'gallery')" class="hidden">
-                                    <div class="bg-white p-3 rounded-full shadow-inner mb-2">📸</div>
                                     <span class="file-status text-[10px] text-slate-400 font-bold uppercase">ফাইল সিলেক্ট করুন</span>
                                 </label>
                                 <label class="file-input-label">
-                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">প্রিভিউ পেজসমূহ</span>
+                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">প্রিভিউ পাতা (ম্যাক্স ৩)</span>
                                     <input type="file" accept="image/*" multiple onchange="handleFileSelect(event, 'preview')" class="hidden">
-                                    <div class="bg-white p-3 rounded-full shadow-inner mb-2">📄</div>
                                     <span class="file-status text-[10px] text-slate-400 font-bold uppercase">ফাইল সিলেক্ট করুন</span>
                                 </label>
                                 <label class="file-input-label">
-                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">বইয়ের PDF ফাইল</span>
+                                    <span class="text-[10px] font-black mb-3 uppercase tracking-tighter">PDF ফাইল (ম্যাক্স ৫০০কেবি)</span>
                                     <input type="file" accept=".pdf" onchange="handleFileSelect(event, 'pdf')" class="hidden">
-                                    <div class="bg-white p-3 rounded-full shadow-inner mb-2">📕</div>
                                     <span class="file-status text-[10px] text-slate-400 font-bold uppercase">ফাইল সিলেক্ট করুন</span>
                                 </label>
                             </div>
                         </div>
-                        <button type="submit" id="book-save-btn" class="md:col-span-2 bg-emerald-600 text-white py-5 rounded-2xl font-black text-xl hover:bg-emerald-700 shadow-xl transition-all active:scale-[0.98]">বই সেভ করুন</button>
+                        <button type="submit" id="book-save-btn" class="md:col-span-2 bg-emerald-600 text-white py-5 rounded-2xl font-black text-xl hover:bg-emerald-700 shadow-xl transition-all">বই সেভ করুন</button>
                     </form>
                 </div>
             `;
         };
 
-        // UI Globals
-        window.toggleAdmin = () => {
-            const el = document.getElementById('admin-gate');
-            if (el) el.classList.toggle('hidden');
-        };
-
-        window.accessAdmin = () => {
-            const input = document.getElementById('admin-pass-input');
-            if(input && input.value === 'admin123') { 
-                window.state.isAdmin = true; 
-                navigateTo('admin'); 
-                toggleAdmin(); 
-            } else {
-                alert('ভুল পাসওয়ার্ড!'); 
-            }
-        };
-
-        window.logoutAdmin = () => {
-            window.state.isAdmin = false;
-            navigateTo('home');
-        };
-
-        window.toggleAdminTab = (t) => { 
-            window.state.adminActiveTab = t; 
-            const container = document.getElementById('admin-view-container');
-            if(t === 'form') {
-                if(container) container.innerHTML = renderAdminForm();
-            } else {
-                render();
-                window.state.tempFiles = { main: '', gallery: [], preview: [], pdf: '' };
-                window.state.tempEditBook = null;
-            }
-        };
+        window.toggleAdmin = () => document.getElementById('admin-gate')?.classList.toggle('hidden');
+        window.accessAdmin = () => { if(document.getElementById('admin-pass-input').value === 'admin123') { window.state.isAdmin = true; navigateTo('admin'); toggleAdmin(); } else alert('ভুল পাসওয়ার্ড!'); };
+        window.logoutAdmin = () => { window.state.isAdmin = false; navigateTo('home'); };
+        window.toggleAdminTab = (t) => { window.state.adminActiveTab = t; if(t === 'form') { const c = document.getElementById('admin-view-container'); if(c) c.innerHTML = renderAdminForm(); } else { render(); window.state.tempFiles = { main: '', gallery: [], preview: [], pdf: '' }; window.state.tempEditBook = null; } };
 
         window.tabSwitch = (t) => {
             const root = document.getElementById('tab-content');
             const b1 = document.getElementById('btn-sum');
             const b2 = document.getElementById('btn-pre');
-            if (!window.state.selectedBook) return;
-            if(t === 'summary') { 
-                if(root) root.innerHTML = window.state.selectedBook.summary; 
-                b1?.classList.add('tab-active'); 
-                b2?.classList.remove('tab-active'); 
-                b2?.classList.add('text-slate-400'); 
-            }
-            else { 
-                if(root) root.innerHTML = `<div class="grid grid-cols-2 gap-4">${window.state.selectedBook.previewPages?.map(img => `<img src="${img}" class="w-full border border-slate-100 rounded-xl shadow-sm bg-white p-1">`).join('') || '<p class="col-span-2 text-center text-slate-300 italic py-10">কোনো পাতা যুক্ত নেই</p>'}</div>`; 
-                b2?.classList.add('tab-active'); 
-                b1?.classList.remove('tab-active'); 
-                b1?.classList.add('text-slate-400'); 
-            }
+            if(t === 'summary') { if(root) root.innerHTML = window.state.selectedBook.summary; b1?.classList.add('tab-active'); b2?.classList.remove('tab-active'); b2?.classList.add('text-slate-400'); }
+            else { if(root) root.innerHTML = `<div class="grid grid-cols-2 gap-4">${window.state.selectedBook.previewPages?.map(img => `<img src="${img}" class="w-full border border-slate-100 rounded-xl shadow-sm bg-white p-1">`).join('') || '<p class="col-span-2 text-center text-slate-300 italic py-10">কোনো পাতা যুক্ত নেই</p>'}</div>`; b2?.classList.add('tab-active'); b1?.classList.remove('tab-active'); b1?.classList.add('text-slate-400'); }
         };
 
         window.openOrderModal = (id) => {
             const b = window.state.books.find(x=>x.id===id);
-            const bookIdInput = document.getElementById('order-book-id');
-            const summaryEl = document.getElementById('order-book-summary');
-            const modal = document.getElementById('order-modal');
-            if(bookIdInput) bookIdInput.value = id;
-            if(summaryEl) summaryEl.innerHTML = `<img src="${b?.images?.[0] || 'https://via.placeholder.com/60x80'}" class="w-12 h-16 object-cover rounded shadow bg-slate-100"><div><p class="font-bold text-slate-800 leading-tight">${b?.title || ''}</p><p class="text-emerald-600 font-black">৳ ${b?.offerPrice || 0}</p></div>`;
-            const bkashEl = document.getElementById('payment-bkash');
-            if(bkashEl) bkashEl.innerText = window.state.config.bkash;
-            if(modal) modal.classList.remove('hidden');
+            const mid = document.getElementById('order-book-id');
+            const msum = document.getElementById('order-book-summary');
+            if(mid) mid.value = id;
+            if(msum) msum.innerHTML = `<img src="${b?.images?.[0] || ''}" class="w-12 h-16 object-cover rounded shadow bg-slate-100"><div><p class="font-bold text-slate-800 leading-tight">${b?.title || ''}</p><p class="text-emerald-600 font-black">৳ ${b?.offerPrice || 0}</p></div>`;
+            document.getElementById('order-modal')?.classList.remove('hidden');
         };
 
-        window.closeOrderModal = () => {
-            const modal = document.getElementById('order-modal');
-            if(modal) modal.classList.add('hidden');
-        };
-
-        window.editBook = (id) => { 
-            window.state.tempEditBook = window.state.books.find(b=>b.id===id); 
-            toggleAdminTab('form'); 
-        };
-
-        window.deleteBookItem = async (id) => { 
-            if(confirm('বইটি ডিলিট করতে চান?')) {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'books', id)); 
-            }
-        };
-
-        window.deleteOrder = async (id) => { 
-            if(confirm('অর্ডারটি ডিলিট করতে চান?')) {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); 
-            }
-        };
-
-        window.updateOrderStatus = async (id, status) => { 
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id), { status }); 
-        };
+        window.closeOrderModal = () => document.getElementById('order-modal')?.classList.add('hidden');
+        window.editBook = (id) => { window.state.tempEditBook = window.state.books.find(b=>b.id===id); toggleAdminTab('form'); };
+        window.deleteBookItem = async (id) => { if(confirm('বইটি ডিলিট করতে চান?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'books', id)); };
+        window.deleteOrder = async (id) => { if(confirm('অর্ডারটি ডিলিট করতে চান?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); };
+        window.updateOrderStatus = async (id, status) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id), { status }); };
 
         window.saveSettings = async () => {
             const ref = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'siteConfig');
@@ -608,13 +537,12 @@
             } catch(err) { alert(err.message); }
         };
 
-        // document level event handling
         document.addEventListener('submit', async (e) => {
             if(e.target.id === 'book-data-form') {
                 e.preventDefault();
                 const btn = document.getElementById('book-save-btn');
                 if(btn) { btn.disabled = true; btn.innerText = "সেভ হচ্ছে..."; }
-                const id = document.getElementById('f-id').value;
+                
                 const bookData = {
                     title: document.getElementById('f-title').value,
                     author: document.getElementById('f-author').value,
@@ -625,33 +553,27 @@
                 };
 
                 const existing = window.state.tempEditBook || {};
-                
-                // image logic
-                if(window.state.tempFiles.main) {
-                    bookData.images = [window.state.tempFiles.main];
-                } else {
-                    bookData.images = existing.images ? [existing.images[0]] : [];
-                }
-
-                if(window.state.tempFiles.gallery.length) {
-                    bookData.images = [bookData.images[0], ...window.state.tempFiles.gallery];
-                } else if(existing.images && existing.images.length > 1) {
-                    bookData.images = [bookData.images[0], ...existing.images.slice(1)];
-                }
+                bookData.images = window.state.tempFiles.main ? [window.state.tempFiles.main] : (existing.images?.slice(0,1) || []);
+                if(window.state.tempFiles.gallery.length) bookData.images = [bookData.images[0], ...window.state.tempFiles.gallery];
+                else if(existing.images) bookData.images = existing.images;
 
                 bookData.previewPages = window.state.tempFiles.preview.length ? window.state.tempFiles.preview : (existing.previewPages || []);
                 bookData.pdfContent = window.state.tempFiles.pdf ? window.state.tempFiles.pdf : (existing.pdfContent || '');
 
+                // Safety Check: Firestore document limit is 1MB. JSON size roughly equals bytes.
+                const docSize = JSON.stringify(bookData).length;
+                if(docSize > 1000000) {
+                    alert("ফাইলের সাইজ অনেক বড় হয়ে গিয়েছে! দয়া করে কম ছবি বা ছোট সাইজের পিডিএফ ব্যবহার করুন।");
+                    if(btn) { btn.disabled = false; btn.innerText = "সেভ করুন"; }
+                    return;
+                }
+
                 try {
                     const col = collection(db, 'artifacts', appId, 'public', 'data', 'books');
-                    if(id) await updateDoc(doc(col, id), bookData);
+                    if(existing.id) await updateDoc(doc(col, existing.id), bookData);
                     else await addDoc(col, bookData);
-                    alert('বইটি সফলভাবে যুক্ত হয়েছে!'); 
-                    toggleAdminTab('books');
-                } catch(err) { 
-                    console.error("Save Error:", err);
-                    alert("সেভ করতে সমস্যা হয়েছে! হয়তো ফাইলের সাইজ অনেক বড় (১ মেগাবাইটের বেশি)। দয়া করে ছোট সাইজের ছবি ব্যবহার করুন।"); 
-                }
+                    alert('সফল হয়েছে!'); toggleAdminTab('books');
+                } catch(err) { alert("এরর: " + err.message); }
                 finally { if(btn) { btn.disabled = false; btn.innerText = "সেভ করুন"; } }
             }
 
@@ -668,10 +590,8 @@
                         trxId: document.getElementById('cust-trx').value,
                         status: 'pending', timestamp: serverTimestamp()
                     });
-                    alert('অর্ডার সফল হয়েছে! আমরা শীঘ্রই যোগাযোগ করব।');
-                    closeOrderModal(); 
-                    e.target.reset();
-                } catch(err) { alert('অর্ডার ফেইল হয়েছে!'); }
+                    alert('অর্ডার সফল হয়েছে!'); closeOrderModal(); e.target.reset();
+                } catch(err) { alert('ফেইল হয়েছে!'); }
                 finally { if(btn) { btn.disabled = false; btn.innerText = "অর্ডার কনফার্ম করুন"; } }
             }
         });
